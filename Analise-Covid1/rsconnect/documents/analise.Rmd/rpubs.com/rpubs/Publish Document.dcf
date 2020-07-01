@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/634250/8550e7e9b06e4cef8a380fd49609d08c
+bundleId: https://api.rpubs.com/api/v1/document/634250/8550e7e9b06e4cef8a380fd49609d08c
+url: http://rpubs.com/lucaasaragao/634250
+when: 1593575013.62021
