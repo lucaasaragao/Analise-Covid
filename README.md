@@ -24,5 +24,11 @@ Analise de dados do vírus covid-19
 - Em desenvolvimento
 
 ---
+
+## Links para as publicações
+
+- [Analise Covid Regiões](https://rpubs.com/lucaasaragao/analiseCovid19)
+
+---
 Desenvolvido por Lucas Aragão 😁
 
