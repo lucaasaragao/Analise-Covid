@@ -1,0 +1,284 @@
+---
+title: "Analise COVID-19"
+author: "Lucas Mangno"
+date: "29/06/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## 1 Objetivo
+
+O objetivo desta atividade é aplicar os conceitos das aulas do minicurso de analise e vizuaisação de dados. Minicurso que faz parte do calendario especial da UFPB. Todas as analises feitas aqui são apenas para praticar os conceitos aprendidos até então. Os dados foram tirados do site   <https://covid.saude.gov.br/>. Tudo isso dito, agora a coisa irá ficar mais informal :) (na verdade não terá formalidade nenhuma)
+
+## 1.1 Objetivo verdadeiro
+
+Quem gosta de relatórios chatos e sonolentos? Eu respondo: O gerente do seu banco, já que nós não somos gerentes de nada não precisamos nos matar para ler um relatório que poder ser muito bem explicado e informativo E NÃO SER CHATO (queria dizer isso para meu chefe). Vou tratar o caso com o máximo de respeito, mas de vez ou outra teremos algumas piadinhas por isso não se zangue, afinal é tudo pela ARTE DE FAZER ANALISES... acredite ela existe.
+
+## 2 Importando tudo 
+
+Deveria chamar essa parte de Java.util só que usou sabe o que é sdds javinha, mas a vida não é bela então vou importar aqui tudo o que eu preciso para fazer essa analise. Caso a pessoa que está lendo (você brother, ou mina) queira usar as mesmas libs que eu, irei dexa no final do relatorio como instalar tudinho.
+
+### Antes de tudo
+
+Removendo as notações cientificas dos valores, até porque ninguém merece ver os gráficos 9+01
+
+```{r scipen, warning=FALSE}
+options(scipen = 999)
+```
+
+Agora as bibliotecas
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse) # conjunto de pacotes que sempre iremos usar
+library(geofacet) # organiza plots de acordo com região
+library(here) # acesso a arquivos relativos à partir da raíz do projeto
+library(lubridate) # manipulação de datas (tidyverse)
+library(patchwork) # organiza o layout dos plots
+library(readxl) # carrega arquivos excel (tidyverse)
+library(scales) # funções úteis para lidar com escalas de gráficos
+library(zoo) # função de média móvel (rolling average)
+library(outliers) # função para melhorar a detecção de outliers
+```
+
+
+## 3 Carregando os dados 
+
+Vamos começar a brincadeira, primeiro passo é saber onde encontrar os dados. Onde a Globo encontra? a Record? a BAND? o STB... peraí o STB tem jornal? O grande professor [Marcus Carvalho](https://github.com/marcuswac) nos deu o site oficial do governo para baixar os dados, então valeu professor. Caso você seja preguiçoso como eu e não queira dar um google pra saber isso, o link está mais acima se nem isso você quer procurar, filho você precisa de ajuda.
+
+
+```{r warning=FALSE}
+dados_covid <- read_xlsx("HIST_PAINEL_COVIDBR_28jun2020.xlsx", guess_max = 100000)
+
+glimpse(dados_covid)
+```
+
+O arquivo fornecido pelo Ministério da Saúde possui dados agregados em 3 níveis de agregação: para todo o Brasil, por estado e por município. Nem pra separar bonitinho o governo serve, sei não viu.
+
+Vamos dar uma olhada como está esse Dataframe 
+
+```{r head, warning=FALSE}
+head(dados_covid)
+```
+
+Só tem NA nisso... temos que dar um jeito.
+
+## 3.1 Explorando
+
+Praticamente um Indiana Jones da análise de dados, percebi que esses dados tem muitos valores faltando, vamos excluir alguns deles para quem tem toque não surtar, esses valores faltando são retornados como NA
+
+```{r}
+covid <- dados_covid%>%
+  filter(is.na(estado), is.na(codmun))
+
+glimpse(covid)
+
+```
+
+
+Pronto, agora podemos começar a brincar bunitinho... 
+
+
+## 3.2 "To só dando uma olhadinha"
+
+Vamos dar uma olhadinha nos dados em forma de gráfico, porque o negocio ta começando a ficar chato.
+
+Vamos usar um gráfico de linha para ver os novos casos de COVID-19 e saber qual mês foi o seu pico.
+
+```{r}
+g_casos_novos <- ggplot(covid, aes(data, casosNovos))+
+  geom_line()+
+  theme_bw()+
+  labs(x="Meses", y="Nº de novos casos")
+
+g_casos_novos
+```
+
+Cara olha esse pico ali depois da metade de JUNHO, realmente em JUNHO tivemos o nosso pico de casos novos. Mas será que em JUNHO por ter mais casos tivemos mais mortes? 
+
+Vamos descobrir 
+
+
+```{r}
+g_obitos_novos <- ggplot(covid, aes(x=data, y=obitosNovos))+
+  geom_line()+
+  theme_bw()+
+  labs(x="Meses", y="Nº de novas mortes")
+
+g_obitos_novos
+```
+    
+ Infelizmente é muita morte :( 
+ 
+ Continuando vamos ver quando os óbitos começaram a crescer. Vou definir que a cor mais fraca do gráfico é o periodo com mais óbitos registrados.
+    
+```{r}
+obitos_crescente <- ggplot(covid, aes(x=data, y=obitosAcumulado))+
+  geom_col(aes(fill = data), colour = "white")+
+  labs(x="Mês", y="Nº de mortes")+
+  ggtitle("Crescimento dos óbitos por Mês")+
+  theme(legend.title = element_blank())
+
+obitos_crescente
+
+```
+
+## 4 Explorando mais um pouco
+
+Tá agora vamos dar uma melhor explorada nos dados, como por exemplo quais as regições do BRASIL com mais números de casos? 
+
+```{r}
+regiao <- dados_covid %>%
+  filter(!is.na(estado), is.na(codmun))%>%
+  select( -codmun, -codRegiaoSaude, -nomeRegiaoSaude,
+         -coduf)
+
+glimpse(regiao)
+
+```
+
+
+Pronto agora que conseguimos os estados, vamos agrupar os dados e plotar mais um gráfico para ver a pandemia por região.
+
+
+Separando as regiões
+
+```{r warning=FALSE}
+covid_regiao <- regiao %>%
+  group_by(regiao, data) %>%
+  summarise(casosNovos = sum(casosNovos),
+            casosAcumulado = sum(casosAcumulado),
+            obitosNovos = sum(obitosNovos),
+            obitosAcumulado = sum(obitosAcumulado))%>%
+  filter(data >= lubridate::dmy("01-04-2020")) # dmy:day-month-year
+
+glimpse(covid_regiao)
+```
+
+Show de bola, agora vamos ver os casos por Região.
+
+```{r}
+plot_regiao <- ggplot(covid_regiao, aes(data, casosAcumulado)) +
+  geom_area(aes(fill = regiao)) +
+  scale_fill_brewer(name = "Região", palette = "Set3") +
+  labs(x = "Mês", y = "Casos Covid-19") +
+  ggtitle("Casos acumulados no Brasil")
+
+plot_regiao
+
+```
+
+Olha só a região Nordeste é meu filho tem comer mais RAPADURA e tomar mais cachaça com mel e limão.
+
+
+## 5 Isolando
+
+
+Vamo que vamo, agora vamos dar uma olhada nas regiões com maior número de casos o nosso querido NORDESTE e o povo lá do Sul.
+
+```{r}
+casos_nordeste_centro_oeste <- covid_regiao %>%
+  filter(regiao == "Nordeste" | regiao == "Sudeste")%>%
+  mutate(data=as.Date(data, format = "%Y-%m-%d"))
+casos_nordeste_centro_oeste
+
+```
+
+Curva de crescimento de casos...
+
+```{r}
+ggplot(casos_nordeste_centro_oeste, aes(x=data, y=casosAcumulado,
+                                        color=regiao)) +
+  geom_line()+
+  scale_fill_brewer(name = "Região") +
+  labs(x = "Mês", y = "Nº de Casos") +
+  ggtitle("Evolução dos casos Nordeste e Sudeste")
+
+```
+
+O Nordeste ultrapassou o Sudeste no mês de Julho, infelizmente. Agora qual estado do Nordeste está com mais casos? Vamos ver se conseguimos achar...
+
+
+
+## 6 Casos Nordeste
+
+Primeiro vamos filtrar o Nordeste para avaliar só ele... Não queremos ele misturado com outras gentalhas.
+
+```{r}
+casos_nordeste <- regiao %>%
+  filter(regiao == "Nordeste")%>%
+  mutate(data=as.Date(data, format = "%Y-%m-%d"))
+casos_nordeste
+
+```
+
+
+Feito! Agora vamos ter uma visão Geral dos dados do Nordeste
+
+```{r}
+
+summary(casos_nordeste)
+
+```
+
+Vamos organizar e procurar informações.
+
+Por exemplo qual a média de casos novos por dia ? 
+
+```{r}
+media_casos_novos <- mean(casos_nordeste$casosNovos)
+media_casos_novos
+```
+
+E qual a média de óbitos ?
+
+```{r}
+media_obitos <- mean(casos_nordeste$obitosNovos)
+media_obitos
+```
+
+E o crescimento dos casos no Nordeste
+
+
+```{r}
+plot_regiao_nordeste <- ggplot(casos_nordeste, aes(data, casosAcumulado)) +
+  geom_area(aes(fill = estado)) +
+  scale_fill_brewer(name = "Região", palette = "Set3") +
+  labs(x = "Mês", y = "Casos Covid-19") +
+  ggtitle("Casos acumulados no Brasil")
+
+plot_regiao_nordeste
+```
+
+Estados dos Nordeste com mais casos...
+
+```{r}
+
+ggplot(casos_nordeste, aes(data, casosAcumulado))+
+  geom_line(aes(fill=estado, colour = estado))+
+  labs(title = "Casos de COVID-19 nos Estados", x="Mês", y="Nº Total de Casos",
+       caption = "Fonte dos dados: Ministério da Saúde")
+
+```
+
+Gráficamente falando ta uma bosta kkkkkk da pra entender nada ai, mas vamos melhorar. Vamos separar cada estado.
+
+```{r}
+plot_casos_estados_nordeste <- ggplot(casos_nordeste, aes(data, casosAcumulado))+
+  geom_line()+
+   labs(title = "Casos acumulados no Estados",x="Mês", y="Nº Total de Casos",
+       caption = "Fonte dos dados: Ministério da Saúde") +
+facet_wrap(vars(estado), ncol=3)
+
+plot_casos_estados_nordeste + theme_minimal()
+```
+
+
+Bem, eu ainda queria fazer uma análise da Paraíba especificamente mas fica para a próxima.
+
+Então até mais essa GALERA, se cuidem, lavem as mãos e usem mascara. VLW FLW 
+
+
