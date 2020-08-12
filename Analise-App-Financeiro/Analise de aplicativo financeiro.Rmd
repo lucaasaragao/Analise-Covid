@@ -1,0 +1,350 @@
+---
+title: "Analise Aplicativo de Controle Financeiro"
+author: "Lucas Mangno"
+date: "27/06/2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+## 1 Objetivo
+
+O Objetivo desta atividade é praticar os conceitos aprendidos nas aulas de introdução à análise de dados, com isso iremos seguir um roteiro de uma análise de um aplicativo financeiro. Porém irei fazer uma como uma analise pessoal tornando assim o relatorio um pouco mais divertido... pelo menos é isso que eu espero.
+
+
+### Antes de tudo
+
+Removendo as notações cientificas dos valores, até porque ninguém merece ver os gráficos 9+01
+```{r scipen}
+options(scipen = 999)
+```
+
+Carregando algumas bibliotecas importantes, esse é meu padrão de bibliotecas sempre uso esse padrão quando vou brincar de fazer analises. Essa é a "receita de bolo" das minhas analises.
+```{r library, message=FALSE, warning=FALSE}
+library(tidyverse) # conjunto de pacotes que sempre iremos usar
+library(geofacet) # organiza plots de acordo com região
+library(here) # acesso a arquivos relativos à partir da raíz do projeto
+library(lubridate) # manipulação de datas (tidyverse)
+library(patchwork) # organiza o layout dos plots
+library(readxl) # carrega arquivos excel (tidyverse)
+library(scales) # funções úteis para lidar com escalas de gráficos
+library(zoo) # função de média móvel (rolling average)
+library(outliers) # função para melhorar a detecção de outliers
+library(ascii)
+```
+
+
+### Vamos carregar os dados disponibilizados
+
+Os dados foram disponibilizados pelo profº Adson Cunha e fazem parte do minicurso de introdução à análise de dados. Obrigado professor :)
+
+```{r read}
+dados_app <- read.csv(here( "aplicativo_controle_financeiro.csv"))
+glimpse(dados_app)
+```
+
+### Olhando as primeiras linhas
+Vi isso uma vez a algum tempo e desde então sempre faço, chamar a função head ajuda a ver um pouco dos dados da minha tabela
+
+```{r head}
+head(dados_app)
+```
+
+
+
+### Medidas 
+Vamos começar com o básico, até porque o básico nunca sai de moda. Primeiro vamos fazer as medidas principais desse data frame.
+
+
+#### Média
+A velha e boa média, coisa que eu corro pra ficar acima desde do 5º periodo.
+
+```{r mean}
+media_horas_logado <- mean(dados_app[["horas_logado"]])
+media_horas_logado
+```
+
+##### Média aparada retirando os valores extremos (outliers)
+Vamos usar a média aparada para ver se os valores continuam proximos...
+
+```{r mean2}
+media_horas_sem_valores_extremos <- mean(dados_app[["horas_logado"]], trim = 0.1)
+media_horas_sem_valores_extremos
+```
+
+#### Médiana das horas logadas no aplicativo
+Agora a mediAna... ou como gosto de chamar a "prima rica da média"
+
+```{r mean3}
+mediana_horas_logado <- median(dados_app[["horas_logado"]])
+mediana_horas_logado
+```
+
+#### Resumo das principais estatisticas
+Agora vamos usar o summary pra dar uma espiadinha nas principais estatisticas do meu data frame
+
+```{r}
+summary(dados_app[["horas_logado"]])
+```
+
+### Desvio padrão
+
+Tá como em toda analise de todo mundo, vamos usar o queridinho da analise de dados ...
+Acho que o sd está para analise de dados assim como o DOM está para o JS, ele está lá e todo mundo usa o dificil é saber o que está usando :)
+
+```{r sd}
+desvio_padrao <- sd(dados_app[["horas_logado"]])
+desvio_padrao
+```
+
+### Quartis
+Ficando um pouco mais sério afinal isso é uma analise e não um show de paidas ruins. Se bem que piadas ruins e JAVA são meu forte, massssss isso não vem ao caso.
+
+#### Calculo do 1ª 2ª 3ª quartis
+```{r quantile}
+Q1 <- quantile(dados_app[["horas_logado"]], probs = 0.25)
+Q2 <- quantile(dados_app[["horas_logado"]], probs = 0.50)
+Q3 <- quantile(dados_app[["horas_logado"]], probs = 0.75)
+```
+
+#### 1ª
+```{r quantile1, echo=FALSE}
+Q1
+```
+  
+#### 2ª  
+```{r quantile2, echo=FALSE}
+Q2
+```
+
+#### 3ª
+```{r quantile3, echo=FALSE}
+Q3
+```
+
+E esse seguino quartil igual ao resultado da mediana ? "Isso pode ARNALDO???"
+
+### Incluindo 1 gráfico, isso mesmo só 1
+Tá acho que to começando a entender esse data frame, mas vamos ver onde os valores estão mais concetrados.
+
+#### Gráfico de Bloxplot assim vemos onde os dados estão concentrados
+```{r bloxplot, echo=FALSE}
+boxplot(dados_app [["horas_logado"]],
+        col="lightblue", ylab="Horas Logadas")
+```
+
+Note que temos um ponto no gráfico perto do número 40. O bloxplot é uma otima opção de gráfico para detectar esse outliers. Vamos ver quem é esse viciado em aplicativo de finanças.
+
+### Usando uma lib top que achei no stack overflow
+Essa biblioteca é responsavel por trazer alguns meliantes (outliers). Assim podemos ver o quão eles podem puxar a média para cima, ou (como anda minha autoestima nessa quanrentena) para baixo
+```{r outliers, echo=FALSE}
+outlier(dados_app[["horas_logado"]])
+```
+Olhai o meliante... Parece que um dos desenvolvedores esqueceu de tirar deslogar da aplicação, normal acontece com too mundo um dia.(Ou o cara é um viciado em fazer analises de app financeiros, afinal tem gente pra tudo no mundo)
+
+
+### Construindo tabela de frequencia 
+OK vamos construir uma tabelinha de frequencia para começar a brincar um pouco mais.
+
+Como diria O Mascara "maasss primeiro" vamos separar nossa tabelinha em 4 classes
+```{r breaks, echo=FALSE}
+breaks <- seq(from=min(dados_app[["horas_logado"]]),
+             to=max(dados_app[["horas_logado"]]), length = 4)
+breaks
+```
+Depois de separar agora é só colocar na tabela
+```{r pop}
+pop_frequencia <- cut(dados_app[["horas_logado"]], breaks=breaks,
+                      rigth=TRUE, include.lowest = TRUE)
+table(pop_frequencia)
+```
+
+Não ta entendendo nada né? Vou te ajudar a entender um pouco mais ...
+
+### Incluindo mais gráficos
+Fazos fazer um os gráficos mais utilizados do mundo, o "Histograma" com ele vc vai entender um pouco melhor o que estou tentando mostrar/fazer
+
+```{r hist, echo=FALSE}
+hist(dados_app[["horas_logado"]], xlab = "Horas logados no app", ylab = "Frequencia")
+
+```
+
+Agora dos nossos intervalos
+
+```{r hist2, echo=FALSE}
+hist(dados_app[["horas_logado"]], breaks = breaks, xlab = "Horas logados no app", ylab = "Frequencia")
+
+```
+
+Pelo Histograma criado podemos ver que a grande maioria das pessoas usam o app pelo tempo de 0 até 12 horas.
+
+
+Mais um Bloxplot mas dessa vez para vermos a quantidade de horas no aplicativo do BB. Se fosse o da caixa estaria em 10000 certeza, o auxlio nunca cai. 
+
+```{r bloxplot2, echo=FALSE}
+boxplot(dados_app [["horas_logado_BB"]],
+        col="lightblue", ylab="Horas Logadas")
+```
+
+### Correlação
+Vamos agor trabalhar com uma váriavel a mais, o tempo que o usuario passou logado em outro aplicativo de finanças, no nosso caso horas_logado_BB. O que queremos com isso é ver se existe alguma correlação no tempo que ele passou em outro aplicativo e o temo que ele passou no "nosso".
+
+Primeiro para termos uma melhor vizualização vou plotar um gráfico simples, adoro essa palavra plotar no dia que eu tiver um cachorro esse será o nome dele.
+
+```{r plot, echo=FALSE}
+plot(dados_app$horas_logado ~ dados_app$horas_logado_BB)
+```
+
+Ok, ok esse gráfico não me muita coisa mas diz nada...O que o g´rafico mostra é uma correlação negativa fraca ou seja quanto um desce o outro sobe vamos ver se está certo mesmo para isso vamos usar a correlação de Pearson quem sabe a gente não tenha um magic number proximo de 1, porque vocês sabem né? Quanto mais proximo de 1 melhor, a UFPB deveria usar isso nas provas :/
+
+```{r cor, echo=FALSE}
+cor(dados_app[["horas_logado"]], dados_app[["horas_logado_BB"]])
+
+```
+
+Ihhhh olha essa correlação negativa ai.
+
+E que tal fazermos um grafico de descida hexagonal com gradiente ? Se eu conseguir eu sou um DEUS do R
+
+```{r , echo=FALSE}
+ggplot(dados_app, (aes(x="horas_logado", y="horas_logado_BB")))+
+  stat_binhex(colour="blue")+
+  theme_bw()+
+  scale_fill_gradient(low = "white", high = "black")+
+  labs(x="Horas logado", y="Horas logado BB")
+```
+
+É, parece que não sou DEUS nenhum, aliais com isso ai vou nem para o céu.
+
+
+### Tabela de contingência
+
+Agora vem a pergunta do milenio, quem é melhor IOS ou ANDROID bem isso eu não sei responder mas sei responder quem usa mais cartão de credito no nosso data frame, para isso vamos fazer uma tabela de contingência passando as variaveis necessarias
+
+```{r}
+table(dados_app[["cartao_cred"]], dados_app[["canal"]])
+
+```
+
+Craindo uma tabela para ver qual SO usa mais app financeiro, alguem chuta que é ANDROID?
+```{r}
+
+quantile(dados_app$horas_logado)
+
+```
+
+Agora vamos agrupar em uma tabelinha...
+
+```{r, echo=FALSE}
+
+horas_uso <- cut(dados_app$horas_logado, quantile(dados_app$horas_logado))
+
+canal <- table(dados_app$canal, horas_uso)
+
+prop.table(canal, margin = 1)
+
+```
+
+E tcharammmm uma tabelinha bem legal.
+
+
+Agora vamos fazer um plot para ver qual dos dois SO usam mais o app.
+
+```{r bloxplot3, echo=FALSE}
+boxplot(dados_app$horas_logado ~ dados_app$canal,
+        col="lightblue", ylab="Quantidade de horas", xlab = "Sistema operacional")
+```
+
+Por pouco, mas o ANDROID usa mais o APP. Oloko, pensava que a diferença iria ser esmagadora.
+
+
+```{r}
+
+ggplot(dados_app, aes(canal, horas_logado))+
+  geom_violin(draw_quantiles = c(.25, .5, .75), linetype = 1)+
+  geom_violin(fill=NA, size=1.1)+
+  theme_bw()+
+  labs(x="Sistema operacional", y="Quantidade de horas")
+```
+
+
+
+### Respostas
+
+a. Por que a mediana é menor do que a média? 
+
+- O dataframe contém valores "extremos" que aumentam o valor da média ou seja puxam a média pra cima. A mediana já é menos afetada por esses valores "extremos".
+  
+b. Por que a mediana é mais próxima da média aparada?
+
+- Pela média ponderada desconsiderar os valores "extremos" ela se aproxima bem mais do valos da mediana do que da média.
+
+---
+a. O que o valor representa?
+
+- O valor representa o desvio dos dados da medida central e a medida mais usada por isso o nome "padrão".
+
+---
+
+a. O que o resultado quer dizer?
+
+- Podemos ver que o segundo quartil é exatamente igual ao valor da mediana, na analise de dados os qaurtis dão uma visão geral dos dados
+ou seja temos umas visão de 25%, 50% e 75% do nosso dataframe
+
+---
+a. Há algum outlier? 
+ - Sim a um outlier de 40.20
+
+b. O que o outlier significa nesse contexto?
+ - Pode significar que um desenvolvedor estava testando o app e passou mais tempo do que deveria logado ou algum erro nos dados.
+
+---
+b. Interprete o histograma
+ - Pelo Histograma criado podemos ver que a grande maioria das pessoas usam o app pelo tempo de 0 até 12 horas.
+ 
+---
+a. O que o gráfico quer dizer?
+ - O gráfico mostra que relação entre as duas variaveis é fraca.
+ 
+---
+8 Indique a proporção do uso de cartão de crédito por canal (android e ios)
+através de uma tabela de contingência
+
+      android  ios
+  nao     809  360
+  sim    1292  539
+
+---
+
+a. O que o resultado quer dizer? 
+ - Que os usuarios do canal ANDROID usam mais o app que o usuarios de IOS
+ 
+---
+
+a. Que informação foi agregada com essa visualização comparada com a
+anterior?
+ - Da para ver que mediana dos dois canais são identicas
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
