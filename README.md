@@ -6,6 +6,10 @@ Analise de dados do vírus covid-19
     <img src="https://github.com/lucaasaragao/Analise-Covid/blob/master/public/transferir%20(1).png" width="500px">
 </h1>
 
+<h1 align="center">
+    <img src="https://github.com/lucaasaragao/Analise-Covid/blob/master/public/ad.png" width="500px">
+</h1>
+
 
 ## 📑 Sobre
 
